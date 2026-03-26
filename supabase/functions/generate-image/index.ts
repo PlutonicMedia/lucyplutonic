@@ -37,7 +37,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    const { prompt, aspectRatio, quality, format: imgFormat, folderId } = await req.json();
+    const { prompt, aspectRatio, quality, format: imgFormat, folderId, referenceImages } = await req.json();
 
     if (!prompt?.trim()) {
       return new Response(JSON.stringify({ error: "Prompt is required" }), {
@@ -51,6 +51,23 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    // Build message content with optional reference images
+    const contentParts: any[] = [];
+
+    if (referenceImages && Array.isArray(referenceImages) && referenceImages.length > 0) {
+      for (const refImg of referenceImages) {
+        contentParts.push({
+          type: "image_url",
+          image_url: { url: refImg },
+        });
+      }
+    }
+
+    contentParts.push({
+      type: "text",
+      text: `Generate an image: ${prompt}. Aspect ratio: ${aspectRatio || "1:1"}. Style: high quality, professional.`,
+    });
+
     // Generate image via AI gateway
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -63,7 +80,7 @@ serve(async (req) => {
         messages: [
           {
             role: "user",
-            content: `Generate an image: ${prompt}. Aspect ratio: ${aspectRatio || "1:1"}. Style: high quality, professional.`,
+            content: contentParts,
           },
         ],
         modalities: ["image", "text"],
