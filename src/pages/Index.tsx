@@ -27,6 +27,21 @@ const Index = () => {
     setProgress({ current: 0, total: config.outputs });
     setShowProgress(true);
 
+    // Convert reference images to base64
+    let referenceBase64: string[] = [];
+    if (config.referenceImages?.length) {
+      referenceBase64 = await Promise.all(
+        config.referenceImages.map(
+          (file) =>
+            new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(file);
+            })
+        )
+      );
+    }
+
     for (let i = 0; i < config.outputs; i++) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -42,6 +57,7 @@ const Index = () => {
             quality: config.quality,
             format: config.format,
             folderId: activeFolder,
+            referenceImages: referenceBase64,
           },
         });
 
