@@ -20,14 +20,15 @@ const Index = () => {
 
   const { folders, imageCounts, addFolder, deleteFolder, refetchCounts } = useFolders();
   const { images, loading: imagesLoading, fetchImages, deleteImages, addImage } = useImages(activeFolder);
-  const { prompts, addPrompt, deletePrompt } = usePrompts();
+  const { prompts, globalPrompts, getProjectPrompts, addPrompt, deletePrompt } = usePrompts();
+
+  const projectPrompts = getProjectPrompts(activeFolder);
 
   const handleGenerate = useCallback(async (config: GenerationConfig) => {
     setIsGenerating(true);
     setProgress({ current: 0, total: config.outputs });
     setShowProgress(true);
 
-    // Convert reference images to base64
     let referenceBase64: string[] = [];
     if (config.referenceImages?.length) {
       referenceBase64 = await Promise.all(
@@ -45,10 +46,7 @@ const Index = () => {
     for (let i = 0; i < config.outputs; i++) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          toast.error("Not authenticated");
-          break;
-        }
+        if (!session) { toast.error("Not authenticated"); break; }
 
         const response = await supabase.functions.invoke("generate-image", {
           body: {
@@ -61,10 +59,7 @@ const Index = () => {
           },
         });
 
-        if (response.error) {
-          toast.error(response.error.message || "Generation failed");
-          break;
-        }
+        if (response.error) { toast.error(response.error.message || "Generation failed"); break; }
 
         const { image } = response.data;
         addImage(image as GeneratedImage);
@@ -79,8 +74,8 @@ const Index = () => {
     setIsGenerating(false);
   }, [activeFolder, addImage, refetchCounts]);
 
-  const handleSavePrompt = useCallback(async (text: string) => {
-    await addPrompt(text);
+  const handleSavePrompt = useCallback(async (text: string, folderId?: string | null) => {
+    await addPrompt(text, [], folderId);
     toast.success("Prompt saved to library");
   }, [addPrompt]);
 
@@ -101,7 +96,8 @@ const Index = () => {
         isGenerating={isGenerating}
         onSavePrompt={handleSavePrompt}
         activeFolder={activeFolder}
-        prompts={prompts}
+        globalPrompts={globalPrompts}
+        projectPrompts={projectPrompts}
       />
       <div className="flex-1 flex flex-col">
         <AppHeader isGenerating={isGenerating} onShowProgress={() => setShowProgress(true)} />
@@ -115,7 +111,7 @@ const Index = () => {
             onRefresh={fetchImages}
           />
         ) : (
-          <PromptLibrary prompts={prompts} onAdd={addPrompt} onDelete={deletePrompt} />
+          <PromptLibrary prompts={prompts} folders={folders} onAdd={addPrompt} onDelete={deletePrompt} />
         )}
       </div>
       <ProgressModal isOpen={showProgress} onClose={() => setShowProgress(false)} current={progress.current} total={progress.total} />

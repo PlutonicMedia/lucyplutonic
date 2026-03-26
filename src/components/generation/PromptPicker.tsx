@@ -3,19 +3,19 @@ import { Search, X } from "lucide-react";
 import type { SavedPrompt } from "@/hooks/usePrompts";
 
 interface PromptPickerProps {
-  prompts: SavedPrompt[];
+  globalPrompts: SavedPrompt[];
+  projectPrompts: SavedPrompt[];
   onSelect: (text: string) => void;
   onClose: () => void;
   activeFolder: string | null;
 }
 
-export function PromptPicker({ prompts, onSelect, onClose, activeFolder }: PromptPickerProps) {
+export function PromptPicker({ globalPrompts, projectPrompts, onSelect, onClose, activeFolder }: PromptPickerProps) {
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"all" | "project">("all");
+  const [tab, setTab] = useState<"global" | "project">("global");
 
-  // For now all saved prompts are "global" since they aren't folder-scoped in the DB.
-  // "Project" tab is a placeholder for future folder-scoped prompts.
-  const filtered = prompts.filter((p) =>
+  const source = tab === "project" ? projectPrompts : globalPrompts;
+  const filtered = source.filter((p) =>
     !search || p.text.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -24,12 +24,12 @@ export function PromptPicker({ prompts, onSelect, onClose, activeFolder }: Promp
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <div className="flex gap-1">
           <button
-            onClick={() => setTab("all")}
+            onClick={() => setTab("global")}
             className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
-              tab === "all" ? "pill-active" : "pill-inactive"
+              tab === "global" ? "pill-active" : "pill-inactive"
             }`}
           >
-            All Prompts
+            Global
           </button>
           {activeFolder && (
             <button
@@ -63,7 +63,7 @@ export function PromptPicker({ prompts, onSelect, onClose, activeFolder }: Promp
       <div className="max-h-48 overflow-y-auto">
         {filtered.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-6">
-            {tab === "project" ? "No project prompts yet" : "No prompts saved yet"}
+            {tab === "project" ? "No project prompts yet" : "No global prompts saved yet"}
           </p>
         ) : (
           filtered.map((p) => (
