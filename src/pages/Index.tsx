@@ -85,6 +85,7 @@ const Index = () => {
         isGenerating={isGenerating}
         onSavePrompt={handleSavePrompt}
         activeFolder={activeFolder}
+        prompts={prompts}
       />
       <div className="flex-1 flex flex-col">
         <AppHeader isGenerating={isGenerating} onShowProgress={() => setShowProgress(true)} />
