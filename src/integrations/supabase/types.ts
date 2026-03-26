@@ -115,6 +115,7 @@ export type Database = {
       saved_prompts: {
         Row: {
           created_at: string
+          folder_id: string | null
           id: string
           tags: string[] | null
           text: string
@@ -123,6 +124,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          folder_id?: string | null
           id?: string
           tags?: string[] | null
           text: string
@@ -131,13 +133,22 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          folder_id?: string | null
           id?: string
           tags?: string[] | null
           text?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "saved_prompts_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
