@@ -1,0 +1,1 @@
+ALTER TABLE public.saved_prompts ADD COLUMN folder_id uuid REFERENCES public.folders(id) ON DELETE CASCADE;
