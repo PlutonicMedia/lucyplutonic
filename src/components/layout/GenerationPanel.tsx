@@ -9,6 +9,8 @@ const FORMATS = ["PNG", "JPG", "WebP"] as const;
 interface GenerationPanelProps {
   onGenerate: (config: GenerationConfig) => void;
   isGenerating: boolean;
+  onSavePrompt: (text: string) => void;
+  activeFolder: string | null;
 }
 
 export interface GenerationConfig {
@@ -19,7 +21,7 @@ export interface GenerationConfig {
   outputs: number;
 }
 
-export function GenerationPanel({ onGenerate, isGenerating }: GenerationPanelProps) {
+export function GenerationPanel({ onGenerate, isGenerating, onSavePrompt }: GenerationPanelProps) {
   const [prompt, setPrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState<string>("1:1");
   const [quality, setQuality] = useState<string>("2K");
@@ -38,7 +40,6 @@ export function GenerationPanel({ onGenerate, isGenerating }: GenerationPanelPro
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-        {/* Prompt */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Prompt</label>
           <textarea
@@ -50,7 +51,6 @@ export function GenerationPanel({ onGenerate, isGenerating }: GenerationPanelPro
           />
         </div>
 
-        {/* Reference Images */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Reference Images</label>
           <button className="w-full flex items-center justify-center gap-2 px-3 py-6 rounded-lg border border-dashed border-input text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors">
@@ -59,7 +59,6 @@ export function GenerationPanel({ onGenerate, isGenerating }: GenerationPanelPro
           </button>
         </div>
 
-        {/* Aspect Ratio */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Aspect Ratio</label>
           <div className="flex flex-wrap gap-1.5">
@@ -67,10 +66,7 @@ export function GenerationPanel({ onGenerate, isGenerating }: GenerationPanelPro
               <button
                 key={ar}
                 onClick={() => setAspectRatio(ar)}
-                className={cn(
-                  "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
-                  aspectRatio === ar ? "pill-active" : "pill-inactive"
-                )}
+                className={cn("px-3 py-1.5 rounded-full text-xs font-medium transition-colors", aspectRatio === ar ? "pill-active" : "pill-inactive")}
               >
                 {ar}
               </button>
@@ -78,7 +74,6 @@ export function GenerationPanel({ onGenerate, isGenerating }: GenerationPanelPro
           </div>
         </div>
 
-        {/* Quality */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Quality</label>
           <div className="flex gap-1.5">
@@ -86,10 +81,7 @@ export function GenerationPanel({ onGenerate, isGenerating }: GenerationPanelPro
               <button
                 key={q}
                 onClick={() => setQuality(q)}
-                className={cn(
-                  "flex-1 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
-                  quality === q ? "pill-active" : "pill-inactive"
-                )}
+                className={cn("flex-1 px-3 py-1.5 rounded-full text-xs font-medium transition-colors", quality === q ? "pill-active" : "pill-inactive")}
               >
                 {q}
               </button>
@@ -97,7 +89,6 @@ export function GenerationPanel({ onGenerate, isGenerating }: GenerationPanelPro
           </div>
         </div>
 
-        {/* Format */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Format</label>
           <div className="flex gap-1.5">
@@ -105,10 +96,7 @@ export function GenerationPanel({ onGenerate, isGenerating }: GenerationPanelPro
               <button
                 key={f}
                 onClick={() => setFormat(f)}
-                className={cn(
-                  "flex-1 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
-                  format === f ? "pill-active" : "pill-inactive"
-                )}
+                className={cn("flex-1 px-3 py-1.5 rounded-full text-xs font-medium transition-colors", format === f ? "pill-active" : "pill-inactive")}
               >
                 {f}
               </button>
@@ -116,24 +104,15 @@ export function GenerationPanel({ onGenerate, isGenerating }: GenerationPanelPro
           </div>
         </div>
 
-        {/* Outputs */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Outputs</label>
             <span className="text-xs font-semibold text-foreground">{outputs}</span>
           </div>
-          <input
-            type="range"
-            min={1}
-            max={10}
-            value={outputs}
-            onChange={(e) => setOutputs(Number(e.target.value))}
-            className="w-full accent-primary h-1.5"
-          />
+          <input type="range" min={1} max={10} value={outputs} onChange={(e) => setOutputs(Number(e.target.value))} className="w-full accent-primary h-1.5" />
         </div>
       </div>
 
-      {/* Actions */}
       <div className="px-5 py-4 border-t border-border space-y-2">
         <button
           onClick={handleGenerate}
@@ -146,7 +125,11 @@ export function GenerationPanel({ onGenerate, isGenerating }: GenerationPanelPro
           <Sparkles className="w-4 h-4" />
           {isGenerating ? "Generating..." : "Generate"}
         </button>
-        <button className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent transition-colors">
+        <button
+          onClick={() => prompt.trim() && onSavePrompt(prompt.trim())}
+          disabled={!prompt.trim()}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
+        >
           <BookmarkPlus className="w-4 h-4" />
           Save to Library
         </button>

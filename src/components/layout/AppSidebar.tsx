@@ -1,52 +1,55 @@
 import { useState } from "react";
-import { FolderPlus, FolderOpen, Trash2, Image, BookOpen, Plus } from "lucide-react";
+import { FolderOpen, Trash2, Image, BookOpen, Plus, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import type { Tables } from "@/integrations/supabase/types";
 
-interface Folder {
-  id: string;
-  name: string;
-  count: number;
-}
-
-const INITIAL_FOLDERS: Folder[] = [
-  { id: "1", name: "Brand Assets", count: 12 },
-  { id: "2", name: "Social Media", count: 8 },
-  { id: "3", name: "Product Shots", count: 5 },
-];
+type Folder = Tables<"folders">;
 
 interface AppSidebarProps {
+  folders: Folder[];
+  imageCounts: Record<string, number>;
   activeFolder: string | null;
   onFolderSelect: (id: string | null) => void;
   activeView: "gallery" | "library";
   onViewChange: (view: "gallery" | "library") => void;
+  onAddFolder: (name: string) => void;
+  onDeleteFolder: (id: string) => void;
 }
 
-export function AppSidebar({ activeFolder, onFolderSelect, activeView, onViewChange }: AppSidebarProps) {
-  const [folders, setFolders] = useState<Folder[]>(INITIAL_FOLDERS);
+export function AppSidebar({
+  folders,
+  imageCounts,
+  activeFolder,
+  onFolderSelect,
+  activeView,
+  onViewChange,
+  onAddFolder,
+  onDeleteFolder,
+}: AppSidebarProps) {
+  const { signOut } = useAuth();
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState("");
 
   const handleAdd = () => {
     if (newName.trim()) {
-      setFolders((prev) => [...prev, { id: Date.now().toString(), name: newName.trim(), count: 0 }]);
+      onAddFolder(newName.trim());
       setNewName("");
       setIsAdding(false);
     }
   };
 
   const handleDelete = (id: string) => {
-    setFolders((prev) => prev.filter((f) => f.id !== id));
+    onDeleteFolder(id);
     if (activeFolder === id) onFolderSelect(null);
   };
 
   return (
     <aside className="w-60 border-r border-border bg-sidebar flex flex-col h-full">
-      {/* Logo */}
       <div className="px-5 py-5 border-b border-border">
         <h1 className="text-xl font-bold text-primary tracking-tight">Lucy</h1>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         <button
           onClick={() => { onViewChange("gallery"); onFolderSelect(null); }}
@@ -69,7 +72,6 @@ export function AppSidebar({ activeFolder, onFolderSelect, activeView, onViewCha
           Prompt Library
         </button>
 
-        {/* Folders */}
         <div className="pt-4">
           <div className="flex items-center justify-between px-3 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Projects</span>
@@ -103,7 +105,7 @@ export function AppSidebar({ activeFolder, onFolderSelect, activeView, onViewCha
               >
                 <FolderOpen className="w-4 h-4" />
                 <span className="truncate flex-1 text-left">{folder.name}</span>
-                <span className="text-xs text-muted-foreground">{folder.count}</span>
+                <span className="text-xs text-muted-foreground">{imageCounts[folder.id] || 0}</span>
               </button>
               <button
                 onClick={() => handleDelete(folder.id)}
@@ -115,6 +117,16 @@ export function AppSidebar({ activeFolder, onFolderSelect, activeView, onViewCha
           ))}
         </div>
       </nav>
+
+      <div className="px-3 py-3 border-t border-border">
+        <button
+          onClick={signOut}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          Sign Out
+        </button>
+      </div>
     </aside>
   );
 }
