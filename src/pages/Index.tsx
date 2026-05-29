@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { AppSidebar } from "@/components/layout/AppSidebar";
-import { GenerationPanel, type GenerationConfig } from "@/components/layout/GenerationPanel";
+import { GenerationPanel, type GenerationConfig, CAROUSEL_ENVIRONMENTS } from "@/components/layout/GenerationPanel";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { GalleryView } from "@/components/gallery/GalleryView";
 import { PromptLibrary } from "@/components/library/PromptLibrary";
@@ -26,7 +26,10 @@ const Index = () => {
 
   const handleGenerate = useCallback(async (config: GenerationConfig) => {
     setIsGenerating(true);
-    setProgress({ current: 0, total: config.outputs });
+    const carousel = config.carousel;
+    const envs = carousel?.enabled ? carousel.environments : [];
+    const total = carousel?.enabled ? envs.length : config.outputs;
+    setProgress({ current: 0, total });
     setShowProgress(true);
 
     let referenceBase64: string[] = [];
@@ -43,19 +46,33 @@ const Index = () => {
       );
     }
 
-    for (let i = 0; i < config.outputs; i++) {
+    const carouselGroupId = carousel?.enabled ? crypto.randomUUID() : null;
+
+    for (let i = 0; i < total; i++) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) { toast.error("Not authenticated"); break; }
 
+        let perPrompt = config.prompt;
+        let envLabel: string | null = null;
+        if (carousel?.enabled) {
+          const env = CAROUSEL_ENVIRONMENTS.find((e) => e.id === envs[i]);
+          if (env) {
+            perPrompt = `${config.prompt} — set in ${env.description}. Keep the same subject, wardrobe, styling and overall look consistent across variants.`;
+            envLabel = env.label;
+          }
+        }
+
         const response = await supabase.functions.invoke("generate-image", {
           body: {
-            prompt: config.prompt,
+            prompt: perPrompt,
             aspectRatio: config.aspectRatio,
             quality: config.quality,
             format: config.format,
             folderId: activeFolder,
             referenceImages: referenceBase64,
+            carouselGroupId,
+            environment: envLabel,
           },
         });
 

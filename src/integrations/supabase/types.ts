@@ -41,7 +41,9 @@ export type Database = {
       generated_images: {
         Row: {
           aspect_ratio: string
+          carousel_group_id: string | null
           created_at: string
+          environment: string | null
           folder_id: string | null
           format: string
           id: string
@@ -53,7 +55,9 @@ export type Database = {
         }
         Insert: {
           aspect_ratio?: string
+          carousel_group_id?: string | null
           created_at?: string
+          environment?: string | null
           folder_id?: string | null
           format?: string
           id?: string
@@ -65,7 +69,9 @@ export type Database = {
         }
         Update: {
           aspect_ratio?: string
+          carousel_group_id?: string | null
           created_at?: string
+          environment?: string | null
           folder_id?: string | null
           format?: string
           id?: string

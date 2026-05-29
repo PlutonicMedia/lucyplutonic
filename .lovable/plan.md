@@ -1,62 +1,56 @@
-# Robust generation for swimwear & lingerie
+# Carousel Mode — Style Variants Across Environments
 
-## Hvad sker der i dag
+## What it does
 
-Logsene viser gentagne `Error: No image returned from AI` fra `generate-image`. Edge functionen kalder `google/gemini-3-pro-image-preview`, og når Geminis safety-filter rammer (typisk for swimwear/undertøj/badetøj), svarer gatewayen med 200 OK, men `choices[0].message.images` er tom — kun en tekstforklaring (refusal) returneres. Vi kaster derfor en generisk fejl, og brugeren får intet billede.
+Add a new **Carousel** toggle to the Generation panel. When enabled, instead of generating N identical-prompt outputs, Lucy generates **up to 5 variants** of the same subject/style placed in **different environments** (e.g. studio, outdoor sunlight, urban street, indoor lifestyle, minimalist set).
 
-Vi løser det ved at (1) bygge en eksplicit fallback-kæde mellem modeller, (2) tilføje en domain-aware prompt-override der omformulerer kendte trigger-ord til neutrale, professionelle termer, og (3) rapportere den faktiske refusal-tekst tilbage i stedet for den nuværende generiske besked.
+Each variant is saved as a separate image in the active folder, tagged so the gallery can show them as a related set.
 
-## Ændringer i `supabase/functions/generate-image/index.ts`
+## UI changes (`GenerationPanel.tsx`)
 
-### 1. Hjælper: `callImageModel(model, contentParts)`
-Wrap fetch-kaldet i en funktion der returnerer `{ ok, imageBase64, refusalText, status }` i stedet for at kaste. Detekter "blocked" tilfælde:
-- HTTP 400/422 med safety-relateret body
-- HTTP 200 hvor `message.images` er tom men `message.content` indeholder tekst → behandl som "blocked", returnér refusalText
+- New section above **Outputs**: a toggle "Carousel mode" with helper text "Generate variants in different environments".
+- When ON:
+  - Hide the existing **Outputs** slider.
+  - Show a small slider/stepper "Variants" (1–5, default 3).
+  - Show a compact, editable list of environment presets (chips): `Studio`, `Outdoor`, `Urban`, `Lifestyle`, `Minimal`. User can deselect chips; the first N selected drive the variants.
+- When OFF: panel behaves exactly as today.
 
-### 2. Prompt-override lag
-Tilføj en `sanitizePromptForSensitive(prompt)` funktion der:
-- Detekterer trigger-keywords (case-insensitive): `lingerie`, `undertøj`, `bra`, `bh`, `panties`, `trusser`, `swimwear`, `badetøj`, `bikini`, `swimsuit`, `briefs`, `bodysuit`, `negligé`
-- Hvis match: præfix prompten med en editorial/kommerciel framing der har vist sig at passere Gemini-filteret:
-  > "Professional e-commerce product photography for an apparel catalog. Tasteful, fully-clothed model in studio lighting. Subject: …"
-- Erstatter `text` delen af `contentParts` med den sanerede version
-- Returnerer også et boolean `wasSanitized` så vi kan logge det
+## Generation flow (`Index.tsx` → `handleGenerate`)
 
-### 3. Fallback-kæde
-Definér en ordnet liste:
-```ts
-const MODEL_CHAIN = [
-  "google/gemini-3-pro-image-preview",       // primær
-  "google/gemini-3.1-flash-image-preview",   // anden Gemini variant, andet sikkerhedsprofil
-  "openai/gpt-image-2",                      // anden provider med andet filter
-];
-```
-Loop gennem kæden:
-1. Forsøg model med original prompt
-2. Hvis blocked → forsøg samme model med sanitized prompt
-3. Hvis stadig blocked → næste model i kæden (start igen med sanitized)
-4. Når en model returnerer et billede → break
-5. Hvis hele kæden fejler → returnér 422 med den sidste refusal-tekst og hvilke modeller der blev prøvet
+- Extend `GenerationConfig` with `carousel?: { enabled: boolean; environments: string[] }`.
+- If `carousel.enabled`:
+  - Loop over the selected environments (max 5).
+  - For each, build a per-call prompt: `${prompt} — set in ${environment description}, same subject and styling, consistent lighting and wardrobe`.
+  - Send a `carouselGroupId` (uuid generated client-side) and `environment` label in the edge function payload so all variants share a group.
+- Progress modal counts variants instead of outputs.
 
-Bemærk: `openai/gpt-image-2` kræver en anden body-shape (`prompt` felt + ikke `messages`/`modalities`) jf. ai-image-generation-knowledge — dette håndteres inde i `callImageModel` via en model→body-mapper.
+## Edge function (`generate-image/index.ts`)
 
-### 4. Bedre fejlrapportering
-Returnér struktureret fejl:
-```json
-{ "error": "Content policy", "detail": "<refusal>", "triedModels": [...] }
-```
-Så frontend (`Index.tsx` `handleGenerate`) kan vise toast med den faktiske grund i stedet for "Generation failed".
+- Accept optional `carouselGroupId` and `environment` fields.
+- Persist them on the inserted `images` row (new nullable columns).
+- No model change — uses the existing sensitive-content fallback chain.
 
-## Ingen ændringer i UI eller DB
+## Database
 
-- Ingen schema-ændringer.
-- Ingen frontend-ændringer udover at lade eksisterende toast vise `error.message` (allerede sådan).
+One migration adding two nullable columns to `images`:
+- `carousel_group_id uuid` (indexed)
+- `environment text`
 
-## Filer der ændres
+No RLS changes; existing `user_id` policies cover them.
 
-- `supabase/functions/generate-image/index.ts` (eneste fil)
+## Gallery (out of scope for this plan)
 
-## Hvad denne plan IKKE gør
+Grouping/visual treatment in the gallery (e.g. a "set of 5" badge or carousel viewer in the lightbox) is **not** included here — this plan only ensures the data is generated and stored correctly so a follow-up can render groups. Confirm if you want the gallery treatment in the same pass.
 
-- Tilføjer ikke en bruger-styret "NSFW mode" toggle — det er en bredere produktbeslutning.
-- Bygger ikke en async job-kø (timeouts er ikke det observerede problem; safety-blocks er).
-- Logger ikke prompts til en separat audit-tabel — kan tilføjes senere hvis ønsket.
+## Files touched
+
+- `supabase/migrations/<new>.sql` (new)
+- `src/components/layout/GenerationPanel.tsx`
+- `src/pages/Index.tsx`
+- `src/hooks/useImages.ts` (type only — pick up new columns)
+- `supabase/functions/generate-image/index.ts`
+
+## Open questions
+
+1. Default environment presets — OK with `Studio / Outdoor / Urban / Lifestyle / Minimal`, or do you have a preferred list (especially for swimwear/lingerie clients)?
+2. Should the gallery visually group carousel sets now, or ship data-only first?

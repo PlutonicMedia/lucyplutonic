@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Upload, Sparkles, BookmarkPlus, X, Library, Globe, FolderOpen } from "lucide-react";
+import { Upload, Sparkles, BookmarkPlus, X, Library, Globe, FolderOpen, Images } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PromptPicker } from "@/components/generation/PromptPicker";
 import type { SavedPrompt } from "@/hooks/usePrompts";
@@ -7,6 +7,16 @@ import type { SavedPrompt } from "@/hooks/usePrompts";
 const ASPECT_RATIOS = ["1:1", "9:16", "4:5", "3:4", "16:9"] as const;
 const QUALITIES = ["1K", "2K", "4K"] as const;
 const FORMATS = ["PNG", "JPG", "WebP"] as const;
+
+export const CAROUSEL_ENVIRONMENTS = [
+  { id: "studio", label: "Studio", description: "clean photo studio with soft seamless backdrop and controlled lighting" },
+  { id: "outdoor", label: "Outdoor", description: "natural outdoor daylight setting with soft sunlight and shallow depth of field" },
+  { id: "urban", label: "Urban", description: "urban street environment with modern architecture and editorial styling" },
+  { id: "lifestyle", label: "Lifestyle", description: "warm indoor lifestyle interior with natural window light" },
+  { id: "minimal", label: "Minimal", description: "minimalist neutral set with pastel backdrop and subtle shadows" },
+] as const;
+
+export type CarouselEnvId = (typeof CAROUSEL_ENVIRONMENTS)[number]["id"];
 
 interface GenerationPanelProps {
   onGenerate: (config: GenerationConfig) => void;
@@ -24,6 +34,10 @@ export interface GenerationConfig {
   format: string;
   outputs: number;
   referenceImages?: File[];
+  carousel?: {
+    enabled: boolean;
+    environments: CarouselEnvId[];
+  };
 }
 
 export function GenerationPanel({ onGenerate, isGenerating, onSavePrompt, activeFolder, globalPrompts, projectPrompts }: GenerationPanelProps) {
@@ -36,11 +50,21 @@ export function GenerationPanel({ onGenerate, isGenerating, onSavePrompt, active
   const [referencePreviews, setReferencePreviews] = useState<string[]>([]);
   const [showPromptPicker, setShowPromptPicker] = useState(false);
   const [showSaveScope, setShowSaveScope] = useState(false);
+  const [carouselEnabled, setCarouselEnabled] = useState(false);
+  const [selectedEnvs, setSelectedEnvs] = useState<CarouselEnvId[]>(["studio", "outdoor", "urban"]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleGenerate = () => {
     if (!prompt.trim()) return;
-    onGenerate({ prompt, aspectRatio, quality, format, outputs, referenceImages });
+    onGenerate({
+      prompt,
+      aspectRatio,
+      quality,
+      format,
+      outputs: carouselEnabled ? selectedEnvs.length : outputs,
+      referenceImages,
+      carousel: carouselEnabled ? { enabled: true, environments: selectedEnvs } : undefined,
+    });
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,6 +94,14 @@ export function GenerationPanel({ onGenerate, isGenerating, onSavePrompt, active
     if (!prompt.trim()) return;
     onSavePrompt(prompt.trim(), scope === "project" ? activeFolder : null);
     setShowSaveScope(false);
+  };
+
+  const toggleEnv = (id: CarouselEnvId) => {
+    setSelectedEnvs((prev) => {
+      if (prev.includes(id)) return prev.filter((e) => e !== id);
+      if (prev.length >= 5) return prev;
+      return [...prev, id];
+    });
   };
 
   return (
@@ -158,23 +190,82 @@ export function GenerationPanel({ onGenerate, isGenerating, onSavePrompt, active
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 rounded-lg border border-border p-3">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Outputs</label>
-            <span className="text-xs font-semibold text-foreground">{outputs}</span>
+            <div className="flex items-center gap-2">
+              <Images className="w-3.5 h-3.5 text-muted-foreground" />
+              <label className="text-xs font-medium text-foreground">Carousel mode</label>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCarouselEnabled((v) => !v)}
+              className={cn(
+                "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                carouselEnabled ? "bg-primary" : "bg-muted",
+              )}
+              aria-pressed={carouselEnabled}
+            >
+              <span
+                className={cn(
+                  "inline-block h-4 w-4 transform rounded-full bg-background transition-transform",
+                  carouselEnabled ? "translate-x-4" : "translate-x-0.5",
+                )}
+              />
+            </button>
           </div>
-          <input type="range" min={1} max={10} value={outputs} onChange={(e) => setOutputs(Number(e.target.value))} className="w-full accent-primary h-1.5" />
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            Generate up to 5 variants of the same style in different environments.
+          </p>
+
+          {carouselEnabled ? (
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Environments</span>
+                <span className="text-[11px] font-semibold text-foreground">{selectedEnvs.length}/5</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {CAROUSEL_ENVIRONMENTS.map((env) => {
+                  const active = selectedEnvs.includes(env.id);
+                  return (
+                    <button
+                      key={env.id}
+                      type="button"
+                      onClick={() => toggleEnv(env.id)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors",
+                        active ? "pill-active" : "pill-inactive",
+                      )}
+                    >
+                      {env.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Outputs</span>
+                <span className="text-[11px] font-semibold text-foreground">{outputs}</span>
+              </div>
+              <input type="range" min={1} max={10} value={outputs} onChange={(e) => setOutputs(Number(e.target.value))} className="w-full accent-primary h-1.5" />
+            </div>
+          )}
         </div>
       </div>
 
       <div className="px-5 py-4 border-t border-border space-y-2">
         <button
           onClick={handleGenerate}
-          disabled={!prompt.trim() || isGenerating}
+          disabled={!prompt.trim() || isGenerating || (carouselEnabled && selectedEnvs.length === 0)}
           className={cn("w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors", "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed")}
         >
           <Sparkles className="w-4 h-4" />
-          {isGenerating ? "Generating..." : "Generate"}
+          {isGenerating
+            ? "Generating..."
+            : carouselEnabled
+              ? `Generate carousel (${selectedEnvs.length})`
+              : "Generate"}
         </button>
 
         <div className="relative">
