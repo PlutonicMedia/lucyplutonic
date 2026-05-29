@@ -37,7 +37,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    const { prompt, aspectRatio, quality, format: imgFormat, folderId, referenceImages } = await req.json();
+    const { prompt, aspectRatio, quality, format: imgFormat, folderId, referenceImages, carouselGroupId, environment } = await req.json();
 
     if (!prompt?.trim()) {
       return new Response(JSON.stringify({ error: "Prompt is required" }), {
@@ -263,6 +263,8 @@ serve(async (req) => {
         format: imgFormat || "PNG",
         image_url: urlData.publicUrl,
         storage_path: fileName,
+        carousel_group_id: carouselGroupId || null,
+        environment: environment || null,
       })
       .select()
       .single();
