@@ -34,6 +34,7 @@ export interface GenerationConfig {
   format: string;
   outputs: number;
   referenceImages?: File[];
+  referenceDescriptions?: string[];
   carousel?: {
     enabled: boolean;
     environments: CarouselEnvId[];
@@ -48,6 +49,7 @@ export function GenerationPanel({ onGenerate, isGenerating, onSavePrompt, active
   const [outputs, setOutputs] = useState(1);
   const [referenceImages, setReferenceImages] = useState<File[]>([]);
   const [referencePreviews, setReferencePreviews] = useState<string[]>([]);
+  const [referenceDescriptions, setReferenceDescriptions] = useState<string[]>([]);
   const [showPromptPicker, setShowPromptPicker] = useState(false);
   const [showSaveScope, setShowSaveScope] = useState(false);
   const [carouselEnabled, setCarouselEnabled] = useState(false);
@@ -63,6 +65,7 @@ export function GenerationPanel({ onGenerate, isGenerating, onSavePrompt, active
       format,
       outputs: carouselEnabled ? selectedEnvs.length : outputs,
       referenceImages,
+      referenceDescriptions,
       carousel: carouselEnabled ? { enabled: true, environments: selectedEnvs } : undefined,
     });
   };
@@ -76,6 +79,11 @@ export function GenerationPanel({ onGenerate, isGenerating, onSavePrompt, active
     const previews = combined.map((f) => URL.createObjectURL(f));
     referencePreviews.forEach((url) => URL.revokeObjectURL(url));
     setReferencePreviews(previews);
+    setReferenceDescriptions((prev) => {
+      const next = [...prev];
+      while (next.length < combined.length) next.push("");
+      return next.slice(0, combined.length);
+    });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -83,6 +91,7 @@ export function GenerationPanel({ onGenerate, isGenerating, onSavePrompt, active
     URL.revokeObjectURL(referencePreviews[index]);
     setReferenceImages((prev) => prev.filter((_, i) => i !== index));
     setReferencePreviews((prev) => prev.filter((_, i) => i !== index));
+    setReferenceDescriptions((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSelectPrompt = (text: string) => {
@@ -146,13 +155,28 @@ export function GenerationPanel({ onGenerate, isGenerating, onSavePrompt, active
           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Reference Images</label>
           <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelect} className="hidden" />
           {referencePreviews.length > 0 && (
-            <div className="flex gap-2 flex-wrap">
+            <div className="space-y-2">
               {referencePreviews.map((url, i) => (
-                <div key={i} className="relative w-14 h-14 rounded-md overflow-hidden border border-border group">
-                  <img src={url} alt={`Reference ${i + 1}`} className="w-full h-full object-cover" />
-                  <button onClick={() => removeReference(i)} className="absolute inset-0 flex items-center justify-center bg-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <X className="w-3.5 h-3.5 text-white" />
-                  </button>
+                <div key={i} className="flex gap-2 items-start">
+                  <div className="relative w-14 h-14 shrink-0 rounded-md overflow-hidden border border-border group">
+                    <img src={url} alt={`Reference ${i + 1}`} className="w-full h-full object-cover" />
+                    <button onClick={() => removeReference(i)} className="absolute inset-0 flex items-center justify-center bg-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <X className="w-3.5 h-3.5 text-white" />
+                    </button>
+                  </div>
+                  <textarea
+                    value={referenceDescriptions[i] ?? ""}
+                    onChange={(e) =>
+                      setReferenceDescriptions((prev) => {
+                        const next = [...prev];
+                        next[i] = e.target.value;
+                        return next;
+                      })
+                    }
+                    placeholder={`Describe image ${i + 1} (e.g. "model wearing the dress", "background scene")`}
+                    rows={2}
+                    className="flex-1 text-xs px-2 py-1.5 rounded-md border border-input bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/60"
+                  />
                 </div>
               ))}
             </div>

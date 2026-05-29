@@ -37,7 +37,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    const { prompt, aspectRatio, quality, format: imgFormat, folderId, referenceImages, carouselGroupId, environment } = await req.json();
+    const { prompt, aspectRatio, quality, format: imgFormat, folderId, referenceImages, referenceDescriptions, carouselGroupId, environment } = await req.json();
 
     if (!prompt?.trim()) {
       return new Response(JSON.stringify({ error: "Prompt is required" }), {
@@ -55,10 +55,21 @@ serve(async (req) => {
     const baseContentParts: any[] = [];
 
     if (referenceImages && Array.isArray(referenceImages) && referenceImages.length > 0) {
-      for (const refImg of referenceImages) {
+      for (let i = 0; i < referenceImages.length; i++) {
+        const refImg = referenceImages[i];
+        const desc = Array.isArray(referenceDescriptions) ? (referenceDescriptions[i] || "").toString().trim() : "";
+        const label = `Reference image ${i + 1}${desc ? ` — ${desc}` : ""}`;
+        baseContentParts.push({ type: "text", text: label });
+        baseContentParts.push({ type: "image_url", image_url: { url: refImg } });
+      }
+      const summary = (referenceDescriptions || [])
+        .map((d: string, i: number) => (d && d.trim() ? `(${i + 1}) ${d.trim()}` : ""))
+        .filter(Boolean)
+        .join("; ");
+      if (summary) {
         baseContentParts.push({
-          type: "image_url",
-          image_url: { url: refImg },
+          type: "text",
+          text: `Use the reference images as described: ${summary}. When the main prompt references them by number or description, apply them accordingly.`,
         });
       }
     }

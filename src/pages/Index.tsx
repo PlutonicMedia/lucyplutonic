@@ -45,6 +45,7 @@ const Index = () => {
         )
       );
     }
+    const referenceDescriptions = config.referenceDescriptions ?? [];
 
     const carouselGroupId = carousel?.enabled ? crypto.randomUUID() : null;
 
@@ -71,6 +72,7 @@ const Index = () => {
             format: config.format,
             folderId: activeFolder,
             referenceImages: referenceBase64,
+            referenceDescriptions,
             carouselGroupId,
             environment: envLabel,
           },
