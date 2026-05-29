@@ -52,64 +52,162 @@ serve(async (req) => {
     }
 
     // Build message content with optional reference images
-    const contentParts: any[] = [];
+    const baseContentParts: any[] = [];
 
     if (referenceImages && Array.isArray(referenceImages) && referenceImages.length > 0) {
       for (const refImg of referenceImages) {
-        contentParts.push({
+        baseContentParts.push({
           type: "image_url",
           image_url: { url: refImg },
         });
       }
     }
 
-    contentParts.push({
-      type: "text",
-      text: `Generate an image: ${prompt}. Aspect ratio: ${aspectRatio || "1:1"}. Style: high quality, professional.`,
-    });
+    // ---- Sensitive content overrides + multi-model fallback ----
+    const SENSITIVE_TRIGGERS = [
+      "lingerie","undertøj","undertoj","bra","bh","panties","trusser",
+      "swimwear","badetøj","badetoj","bikini","swimsuit","briefs",
+      "bodysuit","negligé","neglige","thong","string","corset","korset",
+    ];
+    const isSensitive = (p: string) => {
+      const lower = p.toLowerCase();
+      return SENSITIVE_TRIGGERS.some((t) => new RegExp(`\\b${t}\\b`, "i").test(lower));
+    };
+    const sanitizePrompt = (p: string) =>
+      `Professional e-commerce product photography for an apparel catalog. ` +
+      `Tasteful, modest editorial styling with a fully posed adult model in a brightly lit photo studio. ` +
+      `Focus on the garment fit, fabric, and color. No nudity, no suggestive posing. Subject: ${p}`;
 
-    // Generate image via AI gateway
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+    const buildContentParts = (text: string) => [
+      ...baseContentParts,
+      {
+        type: "text",
+        text: `Generate an image: ${text}. Aspect ratio: ${aspectRatio || "1:1"}. Style: high quality, professional.`,
       },
-      body: JSON.stringify({
-        model: "google/gemini-3-pro-image-preview",
-        messages: [
-          {
-            role: "user",
-            content: contentParts,
-          },
-        ],
-        modalities: ["image", "text"],
-      }),
-    });
+    ];
 
-    if (!aiResponse.ok) {
-      if (aiResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limited. Please try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    type CallResult =
+      | { kind: "ok"; imageBase64: string }
+      | { kind: "blocked"; refusal: string }
+      | { kind: "rate_limited" }
+      | { kind: "no_credits" }
+      | { kind: "error"; status: number; detail: string };
+
+    const callImageModel = async (model: string, text: string): Promise<CallResult> => {
+      const isOpenAIImage = model.startsWith("openai/gpt-image");
+      let body: any;
+      if (isOpenAIImage) {
+        // OpenAI image endpoint shape — referenceImages are ignored here (different API).
+        body = {
+          model,
+          prompt: `${text}. Aspect ratio: ${aspectRatio || "1:1"}. Professional product photography.`,
+          size: "1024x1024",
+          quality: "low",
+          n: 1,
+        };
+      } else {
+        body = {
+          model,
+          messages: [{ role: "user", content: buildContentParts(text) }],
+          modalities: ["image", "text"],
+        };
       }
-      if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ error: "Credits exhausted. Please add funds." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+
+      const endpoint = isOpenAIImage
+        ? "https://ai.gateway.lovable.dev/v1/images/generations"
+        : "https://ai.gateway.lovable.dev/v1/chat/completions";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (res.status === 429) return { kind: "rate_limited" };
+      if (res.status === 402) return { kind: "no_credits" };
+
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        const looksLikeSafety = /safety|policy|content|blocked|moderation|sensitive/i.test(detail);
+        if (looksLikeSafety) return { kind: "blocked", refusal: detail.slice(0, 500) };
+        console.error(`Model ${model} error:`, res.status, detail);
+        return { kind: "error", status: res.status, detail: detail.slice(0, 500) };
       }
-      const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
-      throw new Error(`AI gateway error: ${aiResponse.status}`);
+
+      const data = await res.json();
+
+      if (isOpenAIImage) {
+        const b64 = data?.data?.[0]?.b64_json;
+        if (b64) return { kind: "ok", imageBase64: `data:image/png;base64,${b64}` };
+        return { kind: "blocked", refusal: JSON.stringify(data).slice(0, 500) };
+      }
+
+      const msg = data?.choices?.[0]?.message;
+      const imageUrl = msg?.images?.[0]?.image_url?.url;
+      if (imageUrl) return { kind: "ok", imageBase64: imageUrl };
+
+      // No image but possibly a refusal text — treat as blocked
+      const refusal =
+        (typeof msg?.content === "string" ? msg.content : JSON.stringify(msg?.content)) ||
+        "Model returned no image";
+      return { kind: "blocked", refusal: String(refusal).slice(0, 500) };
+    };
+
+    const MODEL_CHAIN = [
+      "google/gemini-3-pro-image-preview",
+      "google/gemini-3.1-flash-image-preview",
+      "openai/gpt-image-2",
+    ];
+
+    const sensitive = isSensitive(prompt);
+    const triedModels: string[] = [];
+    let lastRefusal = "";
+    let imageBase64: string | null = null;
+
+    outer: for (const model of MODEL_CHAIN) {
+      // For sensitive prompts, skip the raw attempt and go straight to sanitized.
+      const attempts = sensitive ? [sanitizePrompt(prompt)] : [prompt, sanitizePrompt(prompt)];
+      for (const attemptText of attempts) {
+        triedModels.push(model);
+        const result = await callImageModel(model, attemptText);
+
+        if (result.kind === "ok") {
+          imageBase64 = result.imageBase64;
+          break outer;
+        }
+        if (result.kind === "rate_limited") {
+          return new Response(JSON.stringify({ error: "Rate limited. Please try again later." }), {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (result.kind === "no_credits") {
+          return new Response(JSON.stringify({ error: "Credits exhausted. Please add funds." }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (result.kind === "blocked") {
+          lastRefusal = result.refusal;
+          continue; // try next attempt / model
+        }
+        // hard error → try next model
+        lastRefusal = result.detail;
+      }
     }
 
-    const aiData = await aiResponse.json();
-    const imageBase64 = aiData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-
     if (!imageBase64) {
-      throw new Error("No image returned from AI");
+      return new Response(
+        JSON.stringify({
+          error: "Content was rejected by all available image models. Try rephrasing the prompt.",
+          detail: lastRefusal,
+          triedModels,
+        }),
+        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Upload to storage
