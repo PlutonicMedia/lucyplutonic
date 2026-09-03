@@ -22,6 +22,8 @@ Dette dokument er hele overleveringen af Lucy-projektet. Det er skrevet, så du 
 
 Vigtigste benspænd: **Den gamle Lucy skal blive ved med at virke, indtil den nye er live.** Kollegerne bruger den dagligt.
 
+> ⚠️ **KRITISK: Rør aldrig `main` i dette repo.** Lovable har to-vejs-synk med `main` — den kørende Lucy bygges direkte af den branch. Pusher eller merger du noget til `main`, opdaterer du den app, kollegerne bruger lige nu. Alt arbejde i dette repo foregår på brancher (fx `claude/lucy-plutonic-migration-fiuej0`); den nye Lucy bygges i et separat, nyt repo. Sig det også til din Claude Code-session, så den ved det.
+
 ---
 
 ## 2. Hvad Lucy er i dag
@@ -212,6 +214,7 @@ Dette er den plan, Albert har godkendt i overordnede træk. Du må justere rækk
 - **Secrets-disciplin:** hvis Claude nogensinde foreslår at skrive en API-nøgle ind i en fil der committes — sig nej. Nøgler bor i Supabase secrets og i Netlifys env vars, ingen andre steder.
 
 ### Det du IKKE må
+- ❌ Pushe eller merge noget til `main` i det gamle repo (`lucyplutonic`) — den branch er synket med Lovable og ER den kørende Lucy. Kun brancher.
 - ❌ Slette eller "rydde op" i det eksisterende Supabase-projekt (der ligger kollegernes rigtige data).
 - ❌ Ændre den gamle, kørende Lucys edge-funktion destruktivt, før den nye er testet og live.
 - ❌ Committe API-nøgler eller `.env`-filer med hemmeligheder.
